@@ -41,113 +41,106 @@ def if_exists(**kwargs):
     return True
 
 def gmail_api(data, hosp):
-    attach_path = os.path.join(hosp, 'new_attach/')
-    token_file = data['data']['token_file']
-    cred_file = data['data']['json_file']
-    SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
-    now = datetime.now()
-    after = int((now - timedelta(minutes=mail_time)).timestamp())
-    after = str(after)
-    creds = None
-    if os.path.exists(token_file):
-        with open(token_file, 'rb') as token:
-            creds = pickle.load(token)
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                cred_file, SCOPES)
-            creds = flow.run_local_server(port=0)
-        # Save the credentials for the next run
-        with open(token_file, 'wb') as token:
-            pickle.dump(creds, token)
+    try:
+        print(hosp)
+        attach_path = os.path.join(hosp, 'new_attach/')
+        token_file = data['data']['token_file']
+        cred_file = data['data']['json_file']
+        SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+        now = datetime.now()
+        after = int((now - timedelta(minutes=mail_time)).timestamp())
+        after = str(after)
+        creds = None
+        if os.path.exists(token_file):
+            with open(token_file, 'rb') as token:
+                creds = pickle.load(token)
+        # If there are no (valid) credentials available, let the user log in.
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    cred_file, SCOPES)
+                creds = flow.run_local_server(port=0)
+            # Save the credentials for the next run
+            with open(token_file, 'wb') as token:
+                pickle.dump(creds, token)
 
-    service = build('gmail', 'v1', credentials=creds)
-    q = f"after:{after}"
-    results = service.users().messages().list(userId='me', labelIds=['INBOX'],
-                                              q=q).execute()
-    messages = results.get('messages', [])
-    custom_log_data(filename=hosp+'_mails', data=messages)
-    if not messages:
-        pass
-        #print("No messages found.")
-    else:
-        print("Message snippets:")
-        for message in messages[::-1]:
-            try:
-                id, subject, date, filename, sender = '', '', '', '', ''
-                msg = service.users().messages().get(userId='me', id=message['id']).execute()
-                id = msg['id']
-                if if_exists(hosp=hosp, id=id):
-                    continue
-                for i in msg['payload']['headers']:
-                    if i['name'] == 'Subject':
-                        subject = i['value']
-                    if i['name'] == 'From':
-                        sender = i['value']
-                        sender = sender.split('<')[-1].replace('>', '')
-                    if i['name'] == 'Date':
-                        date = i['value']
-                        date = date.split(',')[-1].strip()
-                        format = '%d %b %Y %H:%M:%S %z'
-                        if '(' in date:
-                            date = date.split('(')[0].strip()
-                        try:
-                            date = datetime.strptime(date, format)
-                        except:
+        service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
+        q = f"after:{after}"
+        results = service.users().messages().list(userId='me', labelIds=['INBOX'],
+                                                  q=q).execute()
+        messages = results.get('messages', [])
+        custom_log_data(filename=hosp+'_mails', data=messages)
+        if not messages:
+            pass
+            #print("No messages found.")
+        else:
+            print("Message snippets:")
+            for message in messages[::-1]:
+                try:
+                    id, subject, date, filename, sender = '', '', '', '', ''
+                    msg = service.users().messages().get(userId='me', id=message['id']).execute()
+                    id = msg['id']
+                    if if_exists(hosp=hosp, id=id):
+                        continue
+                    for i in msg['payload']['headers']:
+                        if i['name'] == 'Subject':
+                            subject = i['value']
+                        if i['name'] == 'From':
+                            sender = i['value']
+                            sender = sender.split('<')[-1].replace('>', '')
+                        if i['name'] == 'Date':
+                            date = i['value']
+                            date = date.split(',')[-1].strip()
+                            format = '%d %b %Y %H:%M:%S %z'
+                            if '(' in date:
+                                date = date.split('(')[0].strip()
                             try:
-                                date = parse(date)
+                                date = datetime.strptime(date, format)
                             except:
-                                with open('logs/date_err.log', 'a') as fp:
-                                    print(date, file=fp)
-                                raise Exception
-                        date = date.astimezone(timezone('Asia/Kolkata')).replace(tzinfo=None)
-                        format1 = '%d/%m/%Y %H:%M:%S'
-                        date = date.strftime(format1)
-                    if i['name'] == 'X-Failed-Recipients':
-                        with open(f'logs/{hosp}_fail_mails.log', 'a') as fp:
-                            print(id, subject, date, sep=',', file=fp)
-                        raise Exception
-                custom_log_data(filename=hosp + '_mails', data=[id, subject, date, filename, sender])
-                flag = 0
-                if 'parts' in msg['payload']:
-                    for j in msg['payload']['parts']:
-                        if 'attachmentId' in j['body']:
-                            filename = j['filename']
-                            filename = filename.replace('.PDF', '.pdf')
-                            filename = attach_path + file_no(4) + filename
-                            if file_blacklist(filename):
-                                filename = filename.replace(' ', '')
-                                a_id = j['body']['attachmentId']
-                                attachment = service.users().messages().attachments().get(userId='me', messageId=id,
-                                                                                          id=a_id).execute()
-                                data = attachment['data']
-                                with open(filename, 'wb') as fp:
-                                    fp.write(base64.urlsafe_b64decode(data))
-                                print(filename)
-                                flag = 1
-                else:
-                    data = msg['payload']['body']['data']
-                    filename = attach_path + file_no(8) + '.pdf'
-                    with open(attach_path + 'temp.html', 'wb') as fp:
-                        fp.write(base64.urlsafe_b64decode(data))
-                    print(filename)
-                    pdfkit.from_file(attach_path + 'temp.html', filename, configuration=pdfconfig)
-                    flag = 1
-                if flag == 0:
-                    if 'data' in msg['payload']['parts'][-1]['body']:
-                        data = msg['payload']['parts'][-1]['body']['data']
+                                try:
+                                    date = parse(date)
+                                except:
+                                    with open('logs/date_err.log', 'a') as fp:
+                                        print(date, file=fp)
+                                    raise Exception
+                            date = date.astimezone(timezone('Asia/Kolkata')).replace(tzinfo=None)
+                            format1 = '%d/%m/%Y %H:%M:%S'
+                            date = date.strftime(format1)
+                        if i['name'] == 'X-Failed-Recipients':
+                            with open(f'logs/{hosp}_fail_mails.log', 'a') as fp:
+                                print(id, subject, date, sep=',', file=fp)
+                            raise Exception
+                    custom_log_data(filename=hosp + '_mails', data=[id, subject, date, filename, sender])
+                    flag = 0
+                    if 'parts' in msg['payload']:
+                        for j in msg['payload']['parts']:
+                            if 'attachmentId' in j['body']:
+                                filename = j['filename']
+                                filename = filename.replace('.PDF', '.pdf')
+                                filename = attach_path + file_no(4) + filename
+                                if file_blacklist(filename):
+                                    filename = filename.replace(' ', '')
+                                    a_id = j['body']['attachmentId']
+                                    attachment = service.users().messages().attachments().get(userId='me', messageId=id,
+                                                                                              id=a_id).execute()
+                                    data = attachment['data']
+                                    with open(filename, 'wb') as fp:
+                                        fp.write(base64.urlsafe_b64decode(data))
+                                    print(filename)
+                                    flag = 1
+                    else:
+                        data = msg['payload']['body']['data']
                         filename = attach_path + file_no(8) + '.pdf'
                         with open(attach_path + 'temp.html', 'wb') as fp:
                             fp.write(base64.urlsafe_b64decode(data))
                         print(filename)
                         pdfkit.from_file(attach_path + 'temp.html', filename, configuration=pdfconfig)
                         flag = 1
-                    else:
-                        if 'data' in msg['payload']['parts'][0]['parts'][-1]['body']:
-                            data = msg['payload']['parts'][0]['parts'][-1]['body']['data']
+                    if flag == 0:
+                        if 'data' in msg['payload']['parts'][-1]['body']:
+                            data = msg['payload']['parts'][-1]['body']['data']
                             filename = attach_path + file_no(8) + '.pdf'
                             with open(attach_path + 'temp.html', 'wb') as fp:
                                 fp.write(base64.urlsafe_b64decode(data))
@@ -155,24 +148,36 @@ def gmail_api(data, hosp):
                             pdfkit.from_file(attach_path + 'temp.html', filename, configuration=pdfconfig)
                             flag = 1
                         else:
-                            data = msg['payload']['parts'][0]['parts'][-1]['parts'][-1]['body']['data']
-                            filename = attach_path + file_no(8) + '.pdf'
-                            with open(attach_path + 'temp.html', 'wb') as fp:
-                                fp.write(base64.urlsafe_b64decode(data))
-                            print(filename)
-                            pdfkit.from_file(attach_path + 'temp.html', filename, configuration=pdfconfig)
-                            flag = 1
-                with mysql.connector.connect(**conn_data) as con:
-                    cur = con.cursor()
-                    q = f"insert into {hosp}_mails (`id`,`subject`,`date`,`sys_time`,`attach_path`,`completed`, `sender`) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-                    data = (id, subject, date, str(datetime.now()), os.path.abspath(filename), '', sender)
-                    cur.execute(q, data)
-                    con.commit()
-            except:
-                log_exceptions(id=id, hosp=hosp)
+                            if 'data' in msg['payload']['parts'][0]['parts'][-1]['body']:
+                                data = msg['payload']['parts'][0]['parts'][-1]['body']['data']
+                                filename = attach_path + file_no(8) + '.pdf'
+                                with open(attach_path + 'temp.html', 'wb') as fp:
+                                    fp.write(base64.urlsafe_b64decode(data))
+                                print(filename)
+                                pdfkit.from_file(attach_path + 'temp.html', filename, configuration=pdfconfig)
+                                flag = 1
+                            else:
+                                data = msg['payload']['parts'][0]['parts'][-1]['parts'][-1]['body']['data']
+                                filename = attach_path + file_no(8) + '.pdf'
+                                with open(attach_path + 'temp.html', 'wb') as fp:
+                                    fp.write(base64.urlsafe_b64decode(data))
+                                print(filename)
+                                pdfkit.from_file(attach_path + 'temp.html', filename, configuration=pdfconfig)
+                                flag = 1
+                    with mysql.connector.connect(**conn_data) as con:
+                        cur = con.cursor()
+                        q = f"insert into {hosp}_mails (`id`,`subject`,`date`,`sys_time`,`attach_path`,`completed`, `sender`) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+                        data = (id, subject, date, str(datetime.now()), os.path.abspath(filename), '', sender)
+                        cur.execute(q, data)
+                        con.commit()
+                except:
+                    log_exceptions(id=id, hosp=hosp)
+    except:
+        log_exceptions()
 
 def graph_api(data, hosp):
     try:
+        print(hosp)
         attachfile_path = os.path.join(hosp, 'new_attach/')
         email = data['data']['email']
         cred_file = data['data']['json_file']
@@ -264,6 +269,7 @@ def graph_api(data, hosp):
 
 def imap_(data, hosp):
     try:
+        print(hosp)
         attachfile_path = os.path.join(hosp, 'new_attach/')
         server, email_id, password = data['data']['host'], data['data']['email'], data['data']['password']
         today = datetime.now().strftime('%d-%b-%Y')

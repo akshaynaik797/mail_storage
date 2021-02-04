@@ -9,7 +9,7 @@ from dateutil.parser import parse
 from pytz import timezone
 
 mail_time = 60
-
+interval = 10 #seconds
 conn_data = {'host': "iclaimdev.caq5osti8c47.ap-south-1.rds.amazonaws.com",
              'user': "admin",
              'password': "Welcome1!",
