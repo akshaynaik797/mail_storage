@@ -1,16 +1,14 @@
-from time import sleep
+from settings import conn_data
+import mysql.connector
 
-from apscheduler.schedulers.background import BackgroundScheduler
-
-def fun1(num):
-    for i in range(num-10, num):
-        print(i)
-        sleep(1)
-
-sched = BackgroundScheduler(daemon=False)
-sched.add_job(fun1, 'interval', seconds=3, args=[10], max_instances=1)
-sched.add_job(fun1, 'interval', seconds=3, args=[20], max_instances=1)
-sched.add_job(fun1, 'interval', seconds=3, args=[30], max_instances=1)
-sched.add_job(fun1, 'interval', seconds=3, args=[40], max_instances=1)
-sched.start()
-print('started')
+q = "insert into mail_folder_config (hospital, historical, current) values (%s, %s, %s);"
+with mysql.connector.connect(**conn_data) as con:
+    cur = con.cursor()
+    with open('folders.csv') as fp:
+        for i in fp:
+            row = i.strip('\n').split(',')
+            hosp, hist, curr = row[0], row[1].upper().replace(' ', ''), ''
+            if 'X' in row:
+                curr = hist.upper().replace(' ', '')
+            cur.execute(q, (hosp, hist, curr))
+    con.commit()
