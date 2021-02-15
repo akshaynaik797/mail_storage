@@ -8,8 +8,8 @@ from pathlib import Path
 from dateutil.parser import parse
 from pytz import timezone
 
-mail_time = 15 #minutes
-interval = 300 #seconds
+mail_time = 5 #minutes
+interval = 60 #seconds
 conn_data = {'host': "iclaimdev.caq5osti8c47.ap-south-1.rds.amazonaws.com",
              'user': "admin",
              'password': "Welcome1!",

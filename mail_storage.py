@@ -11,7 +11,7 @@ import logging
 from shutil import copyfile
 
 import pytz
-
+from apscheduler.schedulers.background import BackgroundScheduler
 import mysql.connector
 import msal
 import pdfkit
@@ -26,7 +26,7 @@ from email.header import decode_header
 
 from make_log import log_exceptions, custom_log_data
 from settings import mail_time, file_no, file_blacklist, conn_data, pdfconfig, format_date, save_attachment, \
-    hospital_data
+    hospital_data, interval
 
 
 # all_mails_fields = ("id","subject","date","sys_time","attach_path","completed","sender","hospital","insurer","process","deferred")
@@ -222,7 +222,7 @@ def gmail_api(data, hosp, deferred):
                                     os.replace(mail_attach_filepath, dst)
                                     mail_attach_filepath = os.path.abspath(dst)
                             except:
-                                log_exceptions(id=id, hosp=hosp)
+                                log_exceptions(id=id, hosp=hosp, folder=folder)
                             with mysql.connector.connect(**conn_data) as con:
                                 cur = con.cursor()
                                 q = f"insert into {hosp}_mails (`id`,`subject`,`date`,`sys_time`,`attach_path`,`completed`, `sender`, `folder`, `process`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
@@ -230,13 +230,13 @@ def gmail_api(data, hosp, deferred):
                                 cur.execute(q, data)
                                 con.commit()
                         except:
-                            log_exceptions(id=id, hosp=hosp)
+                            log_exceptions(id=id, hosp=hosp, folder=folder)
                 request = results.list_next(request, msg_col)
 
     except:
-        log_exceptions()
+        log_exceptions(hosp=hosp)
 
-def graph_api(data, hosp, fromtime, totime, deferred):
+def graph_api(data, hosp, deferred):
     try:
         print(hosp)
         after = datetime.now() - timedelta(minutes=mail_time)
@@ -256,7 +256,6 @@ def graph_api(data, hosp, fromtime, totime, deferred):
         after = datetime.now() - timedelta(minutes=mail_time)
         after = after.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         if "access_token" in result:
-            flag = 0
             for folder in get_folders(hosp, deferred):
                 with open('logs/folders.log', 'a') as tfp:
                     print(str(datetime.now()), hosp, folder, sep=',', file=tfp)
@@ -264,16 +263,13 @@ def graph_api(data, hosp, fromtime, totime, deferred):
                 while 1:
                     if flag == 0:
                         query = f"https://graph.microsoft.com/v1.0/users/{email}" \
-                                f"/mailFolders/{folder}/messages?$filter=(receivedDateTime ge {fromtime} and receivedDateTime lt {totime})"
+                                f"/mailFolders/{folder}/messages?$filter=(receivedDateTime ge {after})"
                     flag = 1
-                    print(datetime.now(), ' quering graph api')
                     graph_data2 = requests.get(query,
                                                headers={'Authorization': 'Bearer ' + result['access_token']}, ).json()
                     if 'value' in graph_data2:
                         for i in graph_data2['value']:
-                            print(datetime.now(), ' got mails')
                             try:
-                                print(datetime.now(), ' saving mail in db')
                                 date, subject, attach_path, sender = '', '', '', ''
                                 format = "%Y-%m-%dT%H:%M:%SZ"
                                 b = datetime.strptime(i['receivedDateTime'], format).replace(tzinfo=pytz.utc).astimezone(
@@ -281,49 +277,55 @@ def graph_api(data, hosp, fromtime, totime, deferred):
                                     tzinfo=None)
                                 b = b.strftime('%d/%m/%Y %H:%M:%S')
                                 date, subject, sender = b, i['subject'], i['sender']['emailAddress']['address']
-                                ins, process = get_ins_process(subject, sender)
-                                # print(i['receivedDateTime'], b, i['subject'])
-                                # print(i['sender']['emailAddress']['address'])
-                                if i['hasAttachments'] is True:
-                                    q = f"https://graph.microsoft.com/v1.0/users/{email}/mailFolders/inbox/messages/{i['id']}/attachments"
-                                    attach_data = requests.get(q,
-                                                               headers={'Authorization': 'Bearer ' + result[
-                                                                   'access_token']}, ).json()
-                                    for j in attach_data['value']:
-                                        if '@odata.mediaContentType' in j:
-                                            j['name'] = j['name'].replace('.PDF', '.pdf')
-                                            # print(j['@odata.mediaContentType'], j['name'])
-                                            if file_blacklist(j['name']):
-                                                j['name'] = file_no(4) + j['name']
-                                                with open(os.path.join(attachfile_path, j['name']), 'w+b') as fp:
-                                                    fp.write(base64.b64decode(j['contentBytes']))
-                                                attach_path = os.path.join(attachfile_path, j['name'])
-                                else:
-                                    filename = attachfile_path + file_no(8) + '.pdf'
-                                    if i['body']['contentType'] == 'html':
-                                        with open(attachfile_path + 'temp.html', 'w') as fp:
-                                            fp.write(i['body']['content'])
-                                        pdfkit.from_file(attachfile_path +'temp.html', filename, configuration=pdfconfig)
-                                        attach_path = filename
-                                    elif i['body']['contentType'] == 'text':
-                                        with open(attachfile_path + 'temp.text', 'w') as fp:
-                                            fp.write(i['body']['content'])
-                                        pdfkit.from_file(attachfile_path + 'temp.text', filename, configuration=pdfconfig)
-                                        attach_path = filename
-                                # print(date, subject, attach_path, sender, sep='|')
-                                if process == 'settlement':
-                                    create_settlement_folder(hosp, ins, date, attach_path)
+                                if if_exists(hosp=hosp, subject=subject, date=date, id=i['id']):
+                                    continue
+                                mail_attach_filepath = ''
+                                try:
+                                    if i['hasAttachments'] is True:
+                                        q = f"https://graph.microsoft.com/v1.0/users/{email}/mailFolders/inbox/messages/{i['id']}/attachments"
+                                        attach_data = requests.get(q,
+                                                                   headers={'Authorization': 'Bearer ' + result[
+                                                                       'access_token']}, ).json()
+                                        for j in attach_data['value']:
+                                            if '@odata.mediaContentType' in j:
+                                                j['name'] = j['name'].replace('.PDF', '.pdf')
+                                                # print(j['@odata.mediaContentType'], j['name'])
+                                                if file_blacklist(j['name']):
+                                                    j['name'] = file_no(4) + j['name']
+                                                    with open(os.path.join(attachfile_path, j['name']), 'w+b') as fp:
+                                                        fp.write(base64.b64decode(j['contentBytes']))
+                                                    attach_path = os.path.join(attachfile_path, j['name'])
+                                    else:
+                                        filename = attachfile_path + file_no(8) + '.pdf'
+                                        if i['body']['contentType'] == 'html':
+                                            with open(attachfile_path + 'temp.html', 'w') as fp:
+                                                fp.write(i['body']['content'])
+                                            pdfkit.from_file(attachfile_path +'temp.html', filename, configuration=pdfconfig)
+                                            attach_path = filename
+                                        elif i['body']['contentType'] == 'text':
+                                            with open(attachfile_path + 'temp.text', 'w') as fp:
+                                                fp.write(i['body']['content'])
+                                            pdfkit.from_file(attachfile_path + 'temp.text', filename, configuration=pdfconfig)
+                                            attach_path = filename
+                                    mail_attach_filepath = attach_path
+                                    if mail_attach_filepath != '':
+                                        directory = f"../{hosp}/new_attach"
+                                        Path(directory).mkdir(parents=True, exist_ok=True)
+                                        dst = os.path.join(directory, os.path.split(mail_attach_filepath)[-1])
+                                        os.replace(mail_attach_filepath, dst)
+                                        mail_attach_filepath = os.path.abspath(dst)
+                                except:
+                                    log_exceptions(mid=i['id'], hosp=hosp, folder=folder)
                                 with mysql.connector.connect(**conn_data) as con:
                                     cur = con.cursor()
-                                    q = f"insert into all_mails (`id`,`subject`,`date`,`sys_time`,`attach_path`,`completed`,`sender`,`hospital`,`insurer`,`process`,`deferred`, `mail_folder`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                                    q = f"insert into {hosp}_mails (`id`,`subject`,`date`,`sys_time`,`attach_path`,`completed`, `sender`, `folder`, `process`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
                                     data = (
-                                    i['id'], subject, date, str(datetime.now()), os.path.abspath(attach_path), '', sender, hosp, ins, process, deferred, folder)
+                                    i['id'], subject, date, str(datetime.now()), mail_attach_filepath, '', sender, folder,
+                                    'main')
                                     cur.execute(q, data)
                                     con.commit()
-                                    print(datetime.now(), ' saved mail in db')
-                                    print(date, subject, attach_path, sender, sep='|')
                             except:
-                                log_exceptions(mid=i['id'], hosp=hosp)
+                                log_exceptions(mid=i['id'], hosp=hosp, folder=folder)
                     else:
                         with open('logs/query.log', 'a') as fp:
                             print(query, file=fp)
@@ -334,7 +336,7 @@ def graph_api(data, hosp, fromtime, totime, deferred):
     except:
         log_exceptions(hosp=hosp)
 
-def imap_(data, hosp, fromtime, totime, deferred):
+def imap_(data, hosp, deferred):
     try:
         print(hosp)
         after = datetime.now() - timedelta(minutes=mail_time)
@@ -345,16 +347,13 @@ def imap_(data, hosp, fromtime, totime, deferred):
         imap_server = imaplib.IMAP4_SSL(host=server)
         table = f'{hosp}_mails'
         imap_server.login(email_id, password)
-        # for i in imap_server.list()[1]:
-        #     l = i.decode().split(' "/" ')
-        #     print(l[0] + " = " + l[1])
         for folder in get_folders(hosp, deferred):
             with open('logs/folders.log', 'a') as tfp:
                 print(str(datetime.now()), hosp, folder, sep=',', file=tfp)
             imap_server.select(readonly=True, mailbox=f'"{folder}"')  # Default is `INBOX`
             # Find all emails in inbox and print out the raw email data
             # _, message_numbers_raw = imap_server.search(None, 'ALL')
-            _, message_numbers_raw = imap_server.search(None, f'(SINCE "{fromtime}" BEFORE "{totime}")')
+            _, message_numbers_raw = imap_server.search(None, f'(SINCE "{after}")')
             for message_number in message_numbers_raw[0].split():
                 try:
                     _, msg = imap_server.fetch(message_number, '(RFC822)')
@@ -371,28 +370,36 @@ def imap_(data, hosp, fromtime, totime, deferred):
                             pass
                     for i in ['\r', '\n', '\t']:
                         subject = subject.replace(i, '').strip()
-                    ins, process = get_ins_process(subject, sender)
                     mid = int(message_number)
-                    a = save_attachment(message, attachfile_path)
-                    if not isinstance(a, list):
-                        filename = attachfile_path + file_no(8) + '.pdf'
-                        pdfkit.from_file(a, filename, configuration=pdfconfig)
-                    else:
-                        filename = a[-1]
-                    with open(f'logs/{hosp}_mails.log', 'a') as fp:
-                        print(datetime.now(), subject, date, sender, filename, sep=',', file=fp)
-                    if process == 'settlement':
-                        create_settlement_folder(hosp, ins, date, filename)
+                    if if_exists(id=mid, date=date, subject=subject, hosp=hosp):
+                        continue
+                    mail_attach_filepath = ""
+                    try:
+                        a = save_attachment(message, attachfile_path)
+                        if not isinstance(a, list):
+                            filename = attachfile_path + file_no(8) + '.pdf'
+                            pdfkit.from_file(a, filename, configuration=pdfconfig)
+                        else:
+                            filename = a[-1]
+                        mail_attach_filepath = filename
+                        if mail_attach_filepath != '':
+                            directory = f"../{hosp}/new_attach"
+                            Path(directory).mkdir(parents=True, exist_ok=True)
+                            dst = os.path.join(directory, os.path.split(mail_attach_filepath)[-1])
+                            os.replace(mail_attach_filepath, dst)
+                            mail_attach_filepath = os.path.abspath(dst)
+                    except:
+                        log_exceptions(subject=subject, date=date, hosp=hosp, folder=folder)
                     with mysql.connector.connect(**conn_data) as con:
                         cur = con.cursor()
-                        q = f"insert into all_mails (`id`,`subject`,`date`,`sys_time`,`attach_path`,`completed`,`sender`,`hospital`,`insurer`,`process`,`deferred`, `mail_folder`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                        data = (mid, subject, date, str(datetime.now()), os.path.abspath(filename), '', sender, hosp, ins, process, deferred, folder)
+                        q = f"insert into {hosp}_mails (`id`,`subject`,`date`,`sys_time`,`attach_path`,`completed`, `sender`, `folder`, `process`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                        data = (
+                            mid, subject, date, str(datetime.now()), mail_attach_filepath, '', sender, folder,
+                            'main')
                         cur.execute(q, data)
                         con.commit()
-                        with open(f'logs/{hosp}_mails_in_db.log', 'a') as fp:
-                            print(datetime.now(), subject, date, sender, filename, sep=',', file=fp)
                 except:
-                    log_exceptions(subject=subject, date=date, hosp=hosp)
+                    log_exceptions(subject=subject, date=date, hosp=hosp, folder=folder)
     except:
         log_exceptions(hosp=hosp)
 
@@ -434,6 +441,26 @@ def mail_storage(hospital, deferred):
         elif data['mode'] == 'imap_' and hosp == hospital:
             print(hosp)
             imap_(data, hosp, deferred)
+
+def mail_storage_job(hospital, deferred):
+    sched = BackgroundScheduler(daemon=False)
+    for hosp, data in hospital_data.items():
+        if data['mode'] == 'gmail_api':
+            print(hosp)
+            sched.add_job(gmail_api, 'interval', seconds=interval, max_instances=1,
+                          args=[data, hosp, deferred])
+            # gmail_api(data, hosp, deferred)
+        elif data['mode'] == 'graph_api':
+            print(hosp) #.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            sched.add_job(graph_api, 'interval', seconds=interval, max_instances=1,
+                          args=[data, hosp, deferred])
+            # graph_api(data, hosp, deferred)
+        elif data['mode'] == 'imap_':
+            print(hosp)
+            sched.add_job(imap_, 'interval', seconds=interval, max_instances=1,
+                          args=[data, hosp, deferred])
+            # imap_(data, hosp, deferred)
+    sched.start()
 
 if __name__ == '__main__':
     a = get_ins_process('STAR HEALTH AND ALLIED INSUR04239 - 00040350005154', 'Enetadvicemailing@hdfcbank.net')

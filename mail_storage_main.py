@@ -1,4 +1,6 @@
-from mail_storage import mail_mover, mail_storage
+from mail_storage import mail_storage_job
+from last_mails import last_mails_function
 
 if __name__ == '__main__':
-    mail_storage('noble', "")
+    a = last_mails_function('ils_agartala', '')
+    pass
