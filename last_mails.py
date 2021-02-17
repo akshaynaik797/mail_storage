@@ -91,6 +91,7 @@ def if_exists(**kwargs):
 
 def gmail_api(data, hosp, deferred):
     last_mails = []
+    connection = ""
     try:
         print(hosp)
         after = datetime.now() - timedelta(minutes=mail_time)
@@ -127,48 +128,51 @@ def gmail_api(data, hosp, deferred):
                     pass
                     #print("No messages found.")
                 else:
+                    connection = "X"
                     print("Message snippets:")
-                    for message in [messages[::-1][-1]]:
-                        try:
-                            id, subject, date, filename, sender = '', '', '', '', ''
-                            msg = service.users().messages().get(userId='me', id=message['id']).execute()
-                            id = msg['id']
-                            for i in msg['payload']['headers']:
-                                if i['name'] == 'Subject':
-                                    subject = i['value']
-                                if i['name'] == 'From':
-                                    sender = i['value']
-                                    sender = sender.split('<')[-1].replace('>', '')
-                                if i['name'] == 'Date':
-                                    date = i['value']
-                                    date = date.split(',')[-1].strip()
-                                    format = '%d %b %Y %H:%M:%S %z'
-                                    if '(' in date:
-                                        date = date.split('(')[0].strip()
-                                    try:
-                                        date = datetime.strptime(date, format)
-                                    except:
+                    if len(messages) > 0:
+                        for message in [messages[::-1][-1]]:
+                            try:
+                                id, subject, date, filename, sender = '', '', '', '', ''
+                                msg = service.users().messages().get(userId='me', id=message['id']).execute()
+                                id = msg['id']
+                                for i in msg['payload']['headers']:
+                                    if i['name'] == 'Subject':
+                                        subject = i['value']
+                                    if i['name'] == 'From':
+                                        sender = i['value']
+                                        sender = sender.split('<')[-1].replace('>', '')
+                                    if i['name'] == 'Date':
+                                        date = i['value']
+                                        date = date.split(',')[-1].strip()
+                                        format = '%d %b %Y %H:%M:%S %z'
+                                        if '(' in date:
+                                            date = date.split('(')[0].strip()
                                         try:
-                                            date = parse(date)
+                                            date = datetime.strptime(date, format)
                                         except:
-                                            with open('logs/date_err.log', 'a') as fp:
-                                                print(date, file=fp)
-                                            raise Exception
-                                    date = date.astimezone(timezone('Asia/Kolkata')).replace(tzinfo=None)
-                                    format1 = '%d/%m/%Y %H:%M:%S'
-                                    date = date.strftime(format1)
-                        except:
-                            log_exceptions(id=id, hosp=hosp, folder=folder)
+                                            try:
+                                                date = parse(date)
+                                            except:
+                                                with open('logs/date_err.log', 'a') as fp:
+                                                    print(date, file=fp)
+                                                raise Exception
+                                        date = date.astimezone(timezone('Asia/Kolkata')).replace(tzinfo=None)
+                                        format1 = '%d/%m/%Y %H:%M:%S'
+                                        date = date.strftime(format1)
+                            except:
+                                log_exceptions(id=id, hosp=hosp, folder=folder)
                 request = results.list_next(request, msg_col)
-            last_mails.append({"hosp":hosp, "folder":folder, "subject":subject, "date":date, 'connection':'X'})
+            last_mails.append({"hosp":hosp, "folder":folder, "subject":subject, "date":date, 'connection':connection})
     except:
         log_exceptions(hosp=hosp)
-        last_mails.append({"connection":""})
+        last_mails.append({"connection":connection})
     finally:
         return last_mails
 
 def graph_api(data, hosp, deferred):
     last_mails = []
+    connection = ""
     try:
         print(hosp)
         after = datetime.now() - timedelta(minutes=mail_time)
@@ -200,17 +204,19 @@ def graph_api(data, hosp, deferred):
                     graph_data2 = requests.get(query,
                                                headers={'Authorization': 'Bearer ' + result['access_token']}, ).json()
                     if 'value' in graph_data2:
-                        for i in [graph_data2['value'][-1]]:
-                            try:
-                                date, subject, attach_path, sender = '', '', '', ''
-                                format = "%Y-%m-%dT%H:%M:%SZ"
-                                b = datetime.strptime(i['receivedDateTime'], format).replace(tzinfo=pytz.utc).astimezone(
-                                    pytz.timezone('Asia/Kolkata')).replace(
-                                    tzinfo=None)
-                                b = b.strftime('%d/%m/%Y %H:%M:%S')
-                                date, subject, sender = b, i['subject'], i['sender']['emailAddress']['address']
-                            except:
-                                log_exceptions(mid=i['id'], hosp=hosp, folder=folder)
+                        connection = "X"
+                        if len(graph_data2['value']) > 0:
+                            for i in [graph_data2['value'][-1]]:
+                                try:
+                                    date, subject, attach_path, sender = '', '', '', ''
+                                    format = "%Y-%m-%dT%H:%M:%SZ"
+                                    b = datetime.strptime(i['receivedDateTime'], format).replace(tzinfo=pytz.utc).astimezone(
+                                        pytz.timezone('Asia/Kolkata')).replace(
+                                        tzinfo=None)
+                                    b = b.strftime('%d/%m/%Y %H:%M:%S')
+                                    date, subject, sender = b, i['subject'], i['sender']['emailAddress']['address']
+                                except:
+                                    log_exceptions(mid=i['id'], hosp=hosp, folder=folder)
                     else:
                         with open('logs/query.log', 'a') as fp:
                             print(query, file=fp)
@@ -218,15 +224,16 @@ def graph_api(data, hosp, deferred):
                         query = graph_data2['@odata.nextLink']
                     else:
                         break
-                last_mails.append({"hosp": hosp, "folder": folder, "subject": subject, "date": date, 'connection':'X'})
+                last_mails.append({"hosp": hosp, "folder": folder, "subject": subject, "date": date, 'connection':connection})
     except:
         log_exceptions(hosp=hosp)
-        last_mails.append({"connection":""})
+        last_mails.append({"connection":connection})
     finally:
         return last_mails
 
 def imap_(data, hosp, deferred):
     last_mails = []
+    connection = ""
     try:
         print(hosp)
         after = datetime.now() - timedelta(minutes=mail_time)
@@ -241,6 +248,7 @@ def imap_(data, hosp, deferred):
             # with open('logs/folders.log', 'a') as tfp:
             #     print(str(datetime.now()), hosp, folder, sep=',', file=tfp)
             imap_server.select(readonly=True, mailbox=f'"{folder}"')  # Default is `INBOX`
+            connection = "X"
             # Find all emails in inbox and print out the raw email data
             # _, message_numbers_raw = imap_server.search(None, 'ALL')
             _, message_numbers_raw = imap_server.search(None, f'(SINCE "{after}")')
@@ -263,10 +271,10 @@ def imap_(data, hosp, deferred):
                     mid = int(message_number)
                 except:
                     log_exceptions(subject=subject, date=date, hosp=hosp, folder=folder)
-            last_mails.append({"hosp": hosp, "folder": folder, "subject": subject, "date": date, 'connection':'X'})
+            last_mails.append({"hosp": hosp, "folder": folder, "subject": subject, "date": date, 'connection':connection})
     except:
         log_exceptions(hosp=hosp)
-        last_mails.append({"connection":""})
+        last_mails.append({"connection":connection})
     finally:
         return last_mails
 
