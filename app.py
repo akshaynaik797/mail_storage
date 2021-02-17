@@ -23,6 +23,6 @@ def lastmail():
     for i in ['hospital']:
         if i not in data:
             return jsonify({"error": f"pass {i} parameter"})
-    return last_mails_function(data['hospital'], '')
+    return jsonify(last_mails_function(data['hospital'], ''))
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=9983)
