@@ -160,9 +160,10 @@ def gmail_api(data, hosp, deferred):
                         except:
                             log_exceptions(id=id, hosp=hosp, folder=folder)
                 request = results.list_next(request, msg_col)
-            last_mails.append({"hosp":hosp, "folder":folder, "subject":subject, "date":date})
+            last_mails.append({"hosp":hosp, "folder":folder, "subject":subject, "date":date, 'connection':'X'})
     except:
         log_exceptions(hosp=hosp)
+        last_mails.append({"connection":""})
     finally:
         return last_mails
 
@@ -217,9 +218,10 @@ def graph_api(data, hosp, deferred):
                         query = graph_data2['@odata.nextLink']
                     else:
                         break
-                last_mails.append({"hosp": hosp, "folder": folder, "subject": subject, "date": date})
+                last_mails.append({"hosp": hosp, "folder": folder, "subject": subject, "date": date, 'connection':'X'})
     except:
         log_exceptions(hosp=hosp)
+        last_mails.append({"connection":""})
     finally:
         return last_mails
 
@@ -261,11 +263,14 @@ def imap_(data, hosp, deferred):
                     mid = int(message_number)
                 except:
                     log_exceptions(subject=subject, date=date, hosp=hosp, folder=folder)
-            last_mails.append({"hosp": hosp, "folder": folder, "subject": subject, "date": date})
+            last_mails.append({"hosp": hosp, "folder": folder, "subject": subject, "date": date, 'connection':'X'})
     except:
         log_exceptions(hosp=hosp)
+        last_mails.append({"connection":""})
     finally:
         return last_mails
+
+
 def mail_mover(hospital, deferred):
     fields = ("id","subject","date","sys_time","attach_path","completed","sender","hospital","insurer","process","deferred","sno")
     q = "select * from all_mails where deferred=%s and hospital=%s"
