@@ -1,44 +1,31 @@
-import base64
+import email
 import email
 import imaplib
-import os.path
-import pickle
-import time
-from pathlib import Path
-from datetime import datetime, timedelta
 import json
 import logging
+import os.path
+import pickle
+from datetime import datetime, timedelta
+from email.header import decode_header
+from pathlib import Path
 from shutil import copyfile
 
-import pytz
-from apscheduler.schedulers.background import BackgroundScheduler
-import mysql.connector
 import msal
-import pdfkit
+import mysql.connector
+import pytz
 import requests
+from apscheduler.schedulers.background import BackgroundScheduler
 from dateutil.parser import parse
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from pytz import timezone
-from email.header import decode_header
-
 
 from make_log import log_exceptions, custom_log_data
-from settings import mail_time, file_no, file_blacklist, conn_data, pdfconfig, format_date, save_attachment, \
-    hospital_data, interval
+from settings import conn_data, format_date, hospital_data, interval
 
+mail_time = 600
 
-mail_time = 60
-def create_settlement_folder(hosp, ins, date, filepath):
-    try:
-        date = datetime.strptime(date, '%d/%m/%Y %H:%M:%S').strftime('%m%d%Y%H%M%S')
-        folder = os.path.join(hosp, "letters", f"{ins}_{date}")
-        dst = os.path.join(folder, os.path.split(filepath)[-1])
-        Path(folder).mkdir(parents=True, exist_ok=True)
-        copyfile(filepath, dst)
-    except:
-        log_exceptions(hosp=hosp, ins=ins, date=date, filepath=filepath)
 
 def get_ins_process(subject, email):
     ins, process = "", ""
@@ -117,6 +104,7 @@ def gmail_api(data, hosp, deferred):
                 pickle.dump(creds, token)
         service = build('gmail', 'v1', credentials=creds, cache_discovery=False)
         for folder in get_folders(hosp, deferred):
+            date_list, sub_list = [], []
             q = f"after:{str(after)}"
             results = service.users().messages()
             request = results.list(userId='me', labelIds=[folder], q=q)
@@ -131,7 +119,7 @@ def gmail_api(data, hosp, deferred):
                     connection = "X"
                     print("Message snippets:")
                     if len(messages) > 0:
-                        for message in [messages[::-1][-1]]:
+                        for message in messages:
                             try:
                                 id, subject, date, filename, sender = '', '', '', '', ''
                                 msg = service.users().messages().get(userId='me', id=message['id']).execute()
@@ -157,13 +145,18 @@ def gmail_api(data, hosp, deferred):
                                                 with open('logs/date_err.log', 'a') as fp:
                                                     print(date, file=fp)
                                                 raise Exception
-                                        date = date.astimezone(timezone('Asia/Kolkata')).replace(tzinfo=None)
+                                        temp_date = date = date.astimezone(timezone('Asia/Kolkata')).replace(tzinfo=None)
                                         format1 = '%d/%m/%Y %H:%M:%S'
                                         date = date.strftime(format1)
+                                date_list.append(temp_date)
+                                sub_list.append(subject)
                             except:
                                 log_exceptions(id=id, hosp=hosp, folder=folder)
                 request = results.list_next(request, msg_col)
-            last_mails.append({"hosp":hosp, "folder":folder, "subject":subject, "date":date, 'connection':connection})
+            format1 = '%d/%m/%Y %H:%M:%S'
+            date1 = max(date_list).strftime(format1)
+            subject = sub_list[date_list.index(max(date_list))]
+            last_mails.append({"hosp":hosp, "folder":folder, "subject":subject, "date":date1, 'connection':connection})
     except:
         log_exceptions(hosp=hosp)
         last_mails.append({"connection":connection})
@@ -206,7 +199,7 @@ def graph_api(data, hosp, deferred):
                     if 'value' in graph_data2:
                         connection = "X"
                         if len(graph_data2['value']) > 0:
-                            for i in [graph_data2['value'][-1]]:
+                            for i in graph_data2['value']:
                                 try:
                                     date, subject, attach_path, sender = '', '', '', ''
                                     format = "%Y-%m-%dT%H:%M:%SZ"
@@ -236,7 +229,7 @@ def imap_(data, hosp, deferred):
     connection = ""
     try:
         print(hosp)
-        after = datetime.now() - timedelta(minutes=mail_time)
+        after = datetime.now()
         after = after.strftime('%d-%b-%Y')
         attachfile_path = os.path.join(hosp, 'new_attach/')
         server, email_id, password = data['data']['host'], data['data']['email'], data['data']['password']
