@@ -31,6 +31,19 @@ from settings import mail_time, file_no, file_blacklist, conn_data, pdfconfig, f
 
 # all_mails_fields = ("id","subject","date","sys_time","attach_path","completed","sender","hospital","insurer","process","deferred")
 
+def failed_mails(mid, date, subject, hospital, folder):
+    with mysql.connector.connect(**conn_data) as con:
+        cur = con.cursor()
+        q1 = "select * from failed_storage_mails where `id`=%s and subject=%s and `date`=%s limit 1"
+        data1 = (mid, subject, date)
+        cur.execute(q1, data1)
+        result = cur.fetchone()
+        if result is None:
+            q = "insert into failed_storage_mails (`id`,`subject`,`date`,`sys_time`,`hospital`,`folder`, `sender`) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+            data = (mid, subject, date, str(datetime.now()), hospital, folder, '')
+            cur.execute(q, data)
+            con.commit()
+
 def create_settlement_folder(hosp, ins, date, filepath):
     try:
         date = datetime.strptime(date, '%d/%m/%Y %H:%M:%S').strftime('%m%d%Y%H%M%S')
@@ -231,6 +244,7 @@ def gmail_api(data, hosp, deferred):
                                 con.commit()
                         except:
                             log_exceptions(id=id, hosp=hosp, folder=folder)
+                            failed_mails(id, date, subject, hosp, folder)
                 request = results.list_next(request, msg_col)
     except:
         log_exceptions(hosp=hosp)
@@ -325,6 +339,8 @@ def graph_api(data, hosp, deferred):
                                     con.commit()
                             except:
                                 log_exceptions(mid=i['id'], hosp=hosp, folder=folder)
+                                failed_mails(i['id'], date, subject, hosp, folder)
+
                     else:
                         with open('logs/query.log', 'a') as fp:
                             print(query, file=fp)
@@ -399,6 +415,7 @@ def imap_(data, hosp, deferred):
                         con.commit()
                 except:
                     log_exceptions(subject=subject, date=date, hosp=hosp, folder=folder)
+                    failed_mails(mid, date, subject, hosp, folder)
     except:
         log_exceptions(hosp=hosp)
 
