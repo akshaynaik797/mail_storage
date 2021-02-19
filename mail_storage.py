@@ -232,7 +232,6 @@ def gmail_api(data, hosp, deferred):
                         except:
                             log_exceptions(id=id, hosp=hosp, folder=folder)
                 request = results.list_next(request, msg_col)
-
     except:
         log_exceptions(hosp=hosp)
 
@@ -446,20 +445,14 @@ def mail_storage_job(hospital, deferred):
     sched = BackgroundScheduler(daemon=False)
     for hosp, data in hospital_data.items():
         if data['mode'] == 'gmail_api':
-            print(hosp)
             sched.add_job(gmail_api, 'interval', seconds=interval, max_instances=1,
                           args=[data, hosp, deferred])
-            # gmail_api(data, hosp, deferred)
         elif data['mode'] == 'graph_api':
-            print(hosp) #.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             sched.add_job(graph_api, 'interval', seconds=interval, max_instances=1,
                           args=[data, hosp, deferred])
-            # graph_api(data, hosp, deferred)
         elif data['mode'] == 'imap_':
-            print(hosp)
             sched.add_job(imap_, 'interval', seconds=interval, max_instances=1,
                           args=[data, hosp, deferred])
-            # imap_(data, hosp, deferred)
     sched.start()
 
 if __name__ == '__main__':
