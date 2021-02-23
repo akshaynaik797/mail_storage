@@ -3,6 +3,7 @@ import email
 import imaplib
 import os.path
 import pickle
+import signal
 import time
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -28,7 +29,13 @@ from make_log import log_exceptions, custom_log_data
 from settings import mail_time, file_no, file_blacklist, conn_data, pdfconfig, format_date, save_attachment, \
     hospital_data, interval
 
+class TimeOutException(Exception):
+    pass
 
+
+def alarm_handler(signum, frame):
+    print("ALARM signal received")
+    raise TimeOutException()
 # all_mails_fields = ("id","subject","date","sys_time","attach_path","completed","sender","hospital","insurer","process","deferred")
 
 def failed_mails(mid, date, subject, hospital, folder):
@@ -183,7 +190,7 @@ def gmail_api(data, hosp, deferred):
                                             filename = j['filename']
                                             filename = filename.replace('.PDF', '.pdf')
                                             filename = attach_path + file_no(4) + filename
-                                            if file_blacklist(filename):
+                                            if file_blacklist(filename, email=sender):
                                                 filename = filename.replace(' ', '')
                                                 a_id = j['body']['attachmentId']
                                                 attachment = service.users().messages().attachments().get(userId='me', messageId=id,
@@ -303,7 +310,7 @@ def graph_api(data, hosp, deferred):
                                             if '@odata.mediaContentType' in j:
                                                 j['name'] = j['name'].replace('.PDF', '.pdf')
                                                 # print(j['@odata.mediaContentType'], j['name'])
-                                                if file_blacklist(j['name']):
+                                                if file_blacklist(j['name'], email=sender):
                                                     j['name'] = file_no(4) + j['name']
                                                     with open(os.path.join(attachfile_path, j['name']), 'w+b') as fp:
                                                         fp.write(base64.b64decode(j['contentBytes']))
@@ -390,7 +397,7 @@ def imap_(data, hosp, deferred):
                         continue
                     mail_attach_filepath = ""
                     try:
-                        a = save_attachment(message, attachfile_path)
+                        a = save_attachment(message, attachfile_path, email=sender)
                         if not isinstance(a, list):
                             filename = attachfile_path + file_no(8) + '.pdf'
                             pdfkit.from_file(a, filename, configuration=pdfconfig)

@@ -1,14 +1,28 @@
-from settings import conn_data
-import mysql.connector
+import signal
+import time
 
-q = "insert into mail_folder_config (hospital, historical, current) values (%s, %s, %s);"
-with mysql.connector.connect(**conn_data) as con:
-    cur = con.cursor()
-    with open('folders.csv') as fp:
-        for i in fp:
-            row = i.strip('\n').split(',')
-            hosp, hist, curr = row[0], row[1].upper().replace(' ', ''), ''
-            if 'X' in row:
-                curr = hist.upper().replace(' ', '')
-            cur.execute(q, (hosp, hist, curr))
-    con.commit()
+
+class TimeOutException(Exception):
+    pass
+
+
+def alarm_handler(signum, frame):
+    print("ALARM signal received")
+    raise TimeOutException()
+
+
+def loop(n):
+    for sec in range(n):
+        print("sec {}".format(sec))
+        time.sleep(1)
+
+
+signal.signal(signal.SIGALRM, alarm_handler)
+signal.alarm(8)
+
+try:
+    loop(10)
+except TimeOutException as ex:
+    print(ex)
+signal.alarm(0)
+loop(6)

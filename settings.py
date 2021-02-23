@@ -8,12 +8,13 @@ from pathlib import Path
 from dateutil.parser import parse
 from pytz import timezone
 
-mail_time = 5 #minutes
+time_out = 60
+mail_time = 40 #minutes
 interval = 60 #seconds
 conn_data = {'host': "iclaimdev.caq5osti8c47.ap-south-1.rds.amazonaws.com",
              'user': "admin",
              'password': "Welcome1!",
-             'database': 'python_rep'}
+             'database': 'python'}
 
 pdfconfig = pdfkit.configuration(wkhtmltopdf='/usr/bin/wkhtmltopdf')
 
@@ -72,12 +73,17 @@ def file_no(len):
     return str(randint((10 ** (len - 1)), 10 ** len)) + '_'
 
 
-def file_blacklist(filename):
+def file_blacklist(filename, **kwargs):
     fp = filename
     filename, file_extension = os.path.splitext(fp)
     ext = ['.pdf', '.htm', '.html']
     if file_extension not in ext:
         return False
+    if 'email' in kwargs:
+        if 'ECS' in fp and kwargs['email'] == 'paylink.india@citi.com':
+            return False
+        if 'ecs' in fp and kwargs['email'] == 'paylink.india@citi.com':
+            return False
     if fp.find('ATT00001') != -1:
         return False
     if (fp.find('MDI') != -1) and (fp.find('Query') == -1):
@@ -97,8 +103,6 @@ def file_blacklist(filename):
     if (fp.find('CLAIMGENIEPOSTER') != -1):
         return False
     if (fp.find('declar') != -1):
-        return False
-    if (fp.find('PAYMENT_DETAIL') != -1):
         return False
     return True
 
@@ -127,7 +131,7 @@ def format_date(date):
     return date
 
 
-def save_attachment(msg, download_folder):
+def save_attachment(msg, download_folder, **kwargs):
     """
     Given a message, save its attachments to the specified
     download folder (default is /tmp)
@@ -147,7 +151,7 @@ def save_attachment(msg, download_folder):
             continue
         flag = 1
         filename = part.get_filename()
-        if filename is not None and file_blacklist(filename):
+        if filename is not None and file_blacklist(filename, email=kwargs['email']):
             if not os.path.isfile(filename):
                 fp = open(os.path.join(download_folder, file_seq + filename), 'wb')
                 fp.write(part.get_payload(decode=True))
