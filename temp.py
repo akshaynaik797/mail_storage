@@ -1,28 +1,4 @@
-import signal
-import time
+from settings import file_blacklist
 
-
-class TimeOutException(Exception):
-    pass
-
-
-def alarm_handler(signum, frame):
-    print("ALARM signal received")
-    raise TimeOutException()
-
-
-def loop(n):
-    for sec in range(n):
-        print("sec {}".format(sec))
-        time.sleep(1)
-
-
-signal.signal(signal.SIGALRM, alarm_handler)
-signal.alarm(8)
-
-try:
-    loop(10)
-except TimeOutException as ex:
-    print(ex)
-signal.alarm(0)
-loop(6)
+a = file_blacklist('new_attach/1983_ECS9522021022418470007_11604.pdf', email='paylink.india@citi.com')
+pass

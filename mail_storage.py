@@ -200,6 +200,16 @@ def gmail_api(data, hosp, deferred):
                                                     fp.write(base64.urlsafe_b64decode(data))
                                                 print(filename)
                                                 flag = 1
+                                    if flag == 0:
+                                        for j in msg['payload']['parts']:
+                                            if j['filename'] == '':
+                                                data = j['body']['data']
+                                                filename = 'new_attach/' + file_no(8) + '.pdf'
+                                                with open('new_attach/' + 'temp.html', 'wb') as fp:
+                                                    fp.write(base64.urlsafe_b64decode(data))
+                                                print(filename)
+                                                pdfkit.from_file('new_attach/temp.html', filename, configuration=pdfconfig)
+                                                flag = 1
                                 else:
                                     data = msg['payload']['body']['data']
                                     filename = attach_path + file_no(8) + '.pdf'
