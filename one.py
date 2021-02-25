@@ -266,11 +266,10 @@ def gmail_api(data, hosp, deferred):
     except:
         log_exceptions(hosp=hosp)
 
-def graph_api(data, hosp, deferred):
+def graph_api(data, hosp, deferred, mid):
     try:
         print(hosp)
-        after = datetime.now() - timedelta(minutes=mail_time)
-        after = after.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        folder = ""
         attachfile_path = os.path.join(hosp, 'new_attach/')
         email = data['data']['email']
         cred_file = data['data']['json_file']
@@ -283,90 +282,67 @@ def graph_api(data, hosp, deferred):
         if not result:
             logging.info("No suitable token exists in cache. Let's get a new one from AAD.")
             result = app.acquire_token_for_client(scopes=config["scope"])
-        after = datetime.now() - timedelta(minutes=mail_time)
-        after = after.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         if "access_token" in result:
-            for folder in get_folders(hosp, deferred):
-                with open('logs/folders.log', 'a') as tfp:
-                    print(str(datetime.now()), hosp, folder, sep=',', file=tfp)
+            query = f"https://graph.microsoft.com/v1.0/users/{email}/messages/{mid}"
+            i = requests.get(query, headers={'Authorization': 'Bearer ' + result['access_token']}, ).json()
+            try:
+                date, subject, attach_path, sender = '', '', '', ''
+                format = "%Y-%m-%dT%H:%M:%SZ"
+                b = datetime.strptime(i['receivedDateTime'], format).replace(tzinfo=pytz.utc).astimezone(
+                    pytz.timezone('Asia/Kolkata')).replace(
+                    tzinfo=None)
+                b = b.strftime('%d/%m/%Y %H:%M:%S')
+                date, subject, sender = b, i['subject'], i['sender']['emailAddress']['address']
+                mail_attach_filepath = ''
                 flag = 0
-                while 1:
+                try:
+                    if i['hasAttachments'] is True:
+                        q = f"https://graph.microsoft.com/v1.0/users/{email}/mailFolders/inbox/messages/{i['id']}/attachments"
+                        attach_data = requests.get(q,
+                                                   headers={'Authorization': 'Bearer ' + result[
+                                                       'access_token']}, ).json()
+                        for j in attach_data['value']:
+                            if '@odata.mediaContentType' in j:
+                                j['name'] = j['name'].replace('.PDF', '.pdf')
+                                # print(j['@odata.mediaContentType'], j['name'])
+                                if file_blacklist(j['name'], email=sender):
+                                    j['name'] = file_no(4) + j['name']
+                                    with open(os.path.join(attachfile_path, j['name']), 'w+b') as fp:
+                                        fp.write(base64.b64decode(j['contentBytes']))
+                                    attach_path = os.path.join(attachfile_path, j['name'])
+                                    flag = 1
                     if flag == 0:
-                        query = f"https://graph.microsoft.com/v1.0/users/{email}" \
-                                f"/mailFolders/{folder}/messages?$filter=(receivedDateTime ge {after})"
-                    flag = 1
-                    graph_data2 = requests.get(query,
-                                               headers={'Authorization': 'Bearer ' + result['access_token']}, ).json()
-                    if 'value' in graph_data2:
-                        for i in graph_data2['value']:
-                            try:
-                                date, subject, attach_path, sender = '', '', '', ''
-                                format = "%Y-%m-%dT%H:%M:%SZ"
-                                b = datetime.strptime(i['receivedDateTime'], format).replace(tzinfo=pytz.utc).astimezone(
-                                    pytz.timezone('Asia/Kolkata')).replace(
-                                    tzinfo=None)
-                                b = b.strftime('%d/%m/%Y %H:%M:%S')
-                                date, subject, sender = b, i['subject'], i['sender']['emailAddress']['address']
-                                if if_exists(hosp=hosp, subject=subject, date=date, id=i['id']):
-                                    continue
-                                mail_attach_filepath = ''
-                                flag = 0
-                                try:
-                                    if i['hasAttachments'] is True:
-                                        q = f"https://graph.microsoft.com/v1.0/users/{email}/mailFolders/inbox/messages/{i['id']}/attachments"
-                                        attach_data = requests.get(q,
-                                                                   headers={'Authorization': 'Bearer ' + result[
-                                                                       'access_token']}, ).json()
-                                        for j in attach_data['value']:
-                                            if '@odata.mediaContentType' in j:
-                                                j['name'] = j['name'].replace('.PDF', '.pdf')
-                                                # print(j['@odata.mediaContentType'], j['name'])
-                                                if file_blacklist(j['name'], email=sender):
-                                                    j['name'] = file_no(4) + j['name']
-                                                    with open(os.path.join(attachfile_path, j['name']), 'w+b') as fp:
-                                                        fp.write(base64.b64decode(j['contentBytes']))
-                                                    attach_path = os.path.join(attachfile_path, j['name'])
-                                                    flag = 1
-                                    if flag == 0:
-                                        filename = attachfile_path + file_no(8) + '.pdf'
-                                        if i['body']['contentType'] == 'html':
-                                            with open(attachfile_path + 'temp.html', 'w') as fp:
-                                                fp.write(i['body']['content'])
-                                            pdfkit.from_file(attachfile_path +'temp.html', filename, configuration=pdfconfig)
-                                            attach_path = filename
-                                        elif i['body']['contentType'] == 'text':
-                                            with open(attachfile_path + 'temp.text', 'w') as fp:
-                                                fp.write(i['body']['content'])
-                                            pdfkit.from_file(attachfile_path + 'temp.text', filename, configuration=pdfconfig)
-                                            attach_path = filename
-                                    mail_attach_filepath = attach_path
-                                    if mail_attach_filepath != '':
-                                        directory = f"../{hosp}/new_attach"
-                                        Path(directory).mkdir(parents=True, exist_ok=True)
-                                        dst = os.path.join(directory, os.path.split(mail_attach_filepath)[-1])
-                                        os.replace(mail_attach_filepath, dst)
-                                        mail_attach_filepath = os.path.abspath(dst)
-                                except:
-                                    log_exceptions(mid=i['id'], hosp=hosp, folder=folder)
-                                with mysql.connector.connect(**conn_data) as con:
-                                    cur = con.cursor()
-                                    q = f"insert into {hosp}_mails (`id`,`subject`,`date`,`sys_time`,`attach_path`,`completed`, `sender`, `folder`, `process`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
-                                    data = (
-                                    i['id'], subject, date, str(datetime.now()), mail_attach_filepath, '', sender, folder,
-                                    'main')
-                                    cur.execute(q, data)
-                                    con.commit()
-                            except:
-                                log_exceptions(mid=i['id'], hosp=hosp, folder=folder)
-                                failed_mails(i['id'], date, subject, hosp, folder)
-
-                    else:
-                        with open('logs/query.log', 'a') as fp:
-                            print(query, file=fp)
-                    if '@odata.nextLink' in graph_data2:
-                        query = graph_data2['@odata.nextLink']
-                    else:
-                        break
+                        filename = attachfile_path + file_no(8) + '.pdf'
+                        if i['body']['contentType'] == 'html':
+                            with open(attachfile_path + 'temp.html', 'w') as fp:
+                                fp.write(i['body']['content'])
+                            pdfkit.from_file(attachfile_path +'temp.html', filename, configuration=pdfconfig)
+                            attach_path = filename
+                        elif i['body']['contentType'] == 'text':
+                            with open(attachfile_path + 'temp.text', 'w') as fp:
+                                fp.write(i['body']['content'])
+                            pdfkit.from_file(attachfile_path + 'temp.text', filename, configuration=pdfconfig)
+                            attach_path = filename
+                    mail_attach_filepath = attach_path
+                    if mail_attach_filepath != '':
+                        directory = f"../{hosp}/new_attach"
+                        Path(directory).mkdir(parents=True, exist_ok=True)
+                        dst = os.path.join(directory, os.path.split(mail_attach_filepath)[-1])
+                        os.replace(mail_attach_filepath, dst)
+                        mail_attach_filepath = os.path.abspath(dst)
+                except:
+                    log_exceptions(mid=i['id'], hosp=hosp, folder=folder)
+                with mysql.connector.connect(**conn_data) as con:
+                    cur = con.cursor()
+                    q = f"insert into {hosp}_mails (`id`,`subject`,`date`,`sys_time`,`attach_path`,`completed`, `sender`, `folder`, `process`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                    data = (
+                    i['id'], subject, date, str(datetime.now()), mail_attach_filepath, '', sender, folder,
+                    'main')
+                    cur.execute(q, data)
+                    con.commit()
+            except:
+                log_exceptions(mid=i['id'], hosp=hosp, folder=folder)
+                failed_mails(i['id'], date, subject, hosp, folder)
     except:
         log_exceptions(hosp=hosp)
 
@@ -492,5 +468,5 @@ def mail_storage_job(hospital, deferred):
     sched.start()
 
 if __name__ == '__main__':
-    a = get_ins_process('STAR HEALTH AND ALLIED INSUR04239 - 00040350005154', 'Enetadvicemailing@hdfcbank.net')
+    graph_api(hospital_data['ils_dumdum'], "ils_dumdum", '', 'AAMkAGMxMzcwMjVlLThjYjYtNGJlOC1iOWQzLTUzZjg5MTEwOTJiZABGAAAAAABg8S9egpbpQom_SYSQFJTABwA80npqDluGRIdxtgeTfSBNAAAAAAEMAAA80npqDluGRIdxtgeTfSBNAALBzDieAAA=')
     pass
