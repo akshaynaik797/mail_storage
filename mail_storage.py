@@ -27,7 +27,8 @@ from email.header import decode_header
 
 from make_log import log_exceptions, custom_log_data
 from settings import mail_time, file_no, file_blacklist, conn_data, pdfconfig, format_date, save_attachment, \
-    hospital_data, interval
+    hospital_data, interval, clean_filename
+
 
 class TimeOutException(Exception):
     pass
@@ -188,10 +189,9 @@ def gmail_api(data, hosp, deferred):
                                     for j in msg['payload']['parts']:
                                         if 'attachmentId' in j['body']:
                                             filename = j['filename']
-                                            filename = filename.replace('.PDF', '.pdf')
+                                            filename = clean_filename(filename)
                                             filename = attach_path + file_no(4) + filename
                                             if file_blacklist(filename, email=sender):
-                                                filename = filename.replace(' ', '')
                                                 a_id = j['body']['attachmentId']
                                                 attachment = service.users().messages().attachments().get(userId='me', messageId=id,
                                                                                                           id=a_id).execute()
@@ -204,11 +204,12 @@ def gmail_api(data, hosp, deferred):
                                         for j in msg['payload']['parts']:
                                             if j['filename'] == '':
                                                 data = j['body']['data']
-                                                filename = 'new_attach/' + file_no(8) + '.pdf'
-                                                with open('new_attach/' + 'temp.html', 'wb') as fp:
+                                                filename = attach_path + file_no(8) + '.pdf'
+                                                with open(attach_path + 'temp.html', 'wb') as fp:
                                                     fp.write(base64.urlsafe_b64decode(data))
                                                 print(filename)
-                                                pdfkit.from_file('new_attach/temp.html', filename, configuration=pdfconfig)
+                                                pdfkit.from_file(attach_path + 'temp.html', filename,
+                                                                 configuration=pdfconfig)
                                                 flag = 1
                                 else:
                                     data = msg['payload']['body']['data']
