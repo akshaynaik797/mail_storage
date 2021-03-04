@@ -27,7 +27,8 @@ from email.header import decode_header
 
 from make_log import log_exceptions, custom_log_data
 from settings import mail_time, file_no, file_blacklist, conn_data, pdfconfig, format_date, save_attachment, \
-    hospital_data, interval
+    hospital_data, interval, clean_filename
+
 
 class TimeOutException(Exception):
     pass
@@ -141,7 +142,7 @@ def gmail_api(data, hosp, deferred, mid):
             q = f"after:{str(after)}"
             results = service.users().messages()
             msg = results.get(userId='me', id=mid).execute()
-            while msg is not None:
+            if msg is not None:
                 id = msg['id']
                 for i in msg['payload']['headers']:
                     if i['name'] == 'Subject':
@@ -175,10 +176,10 @@ def gmail_api(data, hosp, deferred, mid):
                     if 'parts' in msg['payload']:
                         for j in msg['payload']['parts']:
                             if 'attachmentId' in j['body']:
-                                filename = j['filename']
-                                filename = clean_filename(filename)
-                                filename = attach_path + file_no(4) + filename
-                                if file_blacklist(filename, email=sender):
+                                temp = j['filename']
+                                if file_blacklist(temp, email=sender):
+                                    filename = clean_filename(temp)
+                                    filename = attach_path + file_no(4) + filename
                                     a_id = j['body']['attachmentId']
                                     attachment = service.users().messages().attachments().get(userId='me', messageId=id,
                                                                                               id=a_id).execute()
@@ -451,5 +452,5 @@ def mail_storage_job(hospital, deferred):
     sched.start()
 
 if __name__ == '__main__':
-    gmail_api(hospital_data['noble'], "noble", '', '177f7681160c04d3')
+    gmail_api(hospital_data['inamdar'], "inamdar", '', '177f8e38897f582e')
     pass

@@ -188,10 +188,10 @@ def gmail_api(data, hosp, deferred):
                                 if 'parts' in msg['payload']:
                                     for j in msg['payload']['parts']:
                                         if 'attachmentId' in j['body']:
-                                            filename = j['filename']
-                                            filename = clean_filename(filename)
-                                            filename = attach_path + file_no(4) + filename
-                                            if file_blacklist(filename, email=sender):
+                                            temp = j['filename']
+                                            if file_blacklist(temp, email=sender):
+                                                filename = clean_filename(temp)
+                                                filename = attach_path + file_no(4) + filename
                                                 a_id = j['body']['attachmentId']
                                                 attachment = service.users().messages().attachments().get(userId='me', messageId=id,
                                                                                                           id=a_id).execute()
