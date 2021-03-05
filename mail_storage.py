@@ -27,7 +27,7 @@ from email.header import decode_header
 
 from make_log import log_exceptions, custom_log_data
 from settings import mail_time, file_no, file_blacklist, conn_data, pdfconfig, format_date, save_attachment, \
-    hospital_data, interval, clean_filename, timeout
+    hospital_data, interval, clean_filename
 
 
 class TimeOutException(Exception):
@@ -152,8 +152,6 @@ def gmail_api(data, hosp, deferred):
                 else:
                     print("Message snippets:")
                     for message in messages[::-1]:
-                        signal.signal(signal.SIGALRM, alarm_handler)
-                        signal.alarm(timeout)
                         try:
                             id, subject, date, filename, sender = '', '', '', '', ''
                             msg = service.users().messages().get(userId='me', id=message['id']).execute()
@@ -265,7 +263,6 @@ def gmail_api(data, hosp, deferred):
                         except:
                             log_exceptions(id=id, hosp=hosp, folder=folder)
                             failed_mails(id, date, subject, hosp, folder)
-                        signal.alarm(0)
                 request = results.list_next(request, msg_col)
     except:
         log_exceptions(hosp=hosp)
@@ -303,8 +300,6 @@ def graph_api(data, hosp, deferred):
                                                headers={'Authorization': 'Bearer ' + result['access_token']}, ).json()
                     if 'value' in graph_data2:
                         for i in graph_data2['value']:
-                            signal.signal(signal.SIGALRM, alarm_handler)
-                            signal.alarm(timeout)
                             try:
                                 date, subject, attach_path, sender = '', '', '', ''
                                 format = "%Y-%m-%dT%H:%M:%SZ"
@@ -365,7 +360,7 @@ def graph_api(data, hosp, deferred):
                             except:
                                 log_exceptions(mid=i['id'], hosp=hosp, folder=folder)
                                 failed_mails(i['id'], date, subject, hosp, folder)
-                            signal.alarm(0)
+
                     else:
                         with open('logs/query.log', 'a') as fp:
                             print(query, file=fp)
@@ -395,8 +390,6 @@ def imap_(data, hosp, deferred):
             # _, message_numbers_raw = imap_server.search(None, 'ALL')
             _, message_numbers_raw = imap_server.search(None, f'(SINCE "{after}")')
             for message_number in message_numbers_raw[0].split():
-                signal.signal(signal.SIGALRM, alarm_handler)
-                signal.alarm(timeout)
                 try:
                     _, msg = imap_server.fetch(message_number, '(RFC822)')
                     message = email.message_from_bytes(msg[0][1])
@@ -443,7 +436,6 @@ def imap_(data, hosp, deferred):
                 except:
                     log_exceptions(subject=subject, date=date, hosp=hosp, folder=folder)
                     failed_mails(mid, date, subject, hosp, folder)
-                signal.alarm(0)
     except:
         log_exceptions(hosp=hosp)
 
