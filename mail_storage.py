@@ -101,8 +101,12 @@ def get_folders(hospital, deferred):
     return result
 
 def if_exists(**kwargs):
-    q = f"select * from {kwargs['hosp']}_mails where subject=%s and date=%s and id=%s limit 1"
-    data = (kwargs['subject'], kwargs['date'], kwargs['id'])
+    if 'id' in kwargs:
+        q = f"select * from {kwargs['hosp']}_mails where subject=%s and date=%s and id=%s limit 1"
+        data = (kwargs['subject'], kwargs['date'], kwargs['id'])
+    else:
+        q = f"select * from {kwargs['hosp']}_mails where subject=%s and date=%s limit 1"
+        data = (kwargs['subject'], kwargs['date'])
     with mysql.connector.connect(**conn_data) as con:
         cur = con.cursor()
         cur.execute(q, data)
@@ -406,7 +410,7 @@ def imap_(data, hosp, deferred):
                     for i in ['\r', '\n', '\t']:
                         subject = subject.replace(i, '').strip()
                     mid = int(message_number)
-                    if if_exists(id=mid, date=date, subject=subject, hosp=hosp):
+                    if if_exists(date=date, subject=subject, hosp=hosp):
                         continue
                     mail_attach_filepath = ""
                     try:
