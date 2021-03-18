@@ -213,7 +213,7 @@ def gmail_api(data, hosp, deferred):
                                                 try:
                                                     data = j['body']['data']
                                                 except KeyError:
-                                                    data = gen_dict_extract('data', j)[-1]
+                                                    data = [ i for i in gen_dict_extract('data', j)][-1]
                                                 filename = attach_path + file_no(8) + '.pdf'
                                                 with open(attach_path + 'temp.html', 'wb') as fp:
                                                     fp.write(base64.urlsafe_b64decode(data))

@@ -194,7 +194,7 @@ def gmail_api(data, hosp, deferred, mid):
                                     try:
                                         data = j['body']['data']
                                     except KeyError:
-                                        data = gen_dict_extract('data', j)[-1]
+                                        data = [ i for i in gen_dict_extract('data', j)][-1]
                                     filename = attach_path + file_no(8) + '.pdf'
                                     with open(attach_path + 'temp.html', 'wb') as fp:
                                         fp.write(base64.urlsafe_b64decode(data))
@@ -455,5 +455,5 @@ def mail_storage_job(hospital, deferred):
     sched.start()
 
 if __name__ == '__main__':
-    mid = '1783fe44859e902c'
+    mid = '17845243983100e2'
     gmail_api(hospital_data['noble'], "noble", '', mid)
