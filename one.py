@@ -455,5 +455,5 @@ def mail_storage_job(hospital, deferred):
     sched.start()
 
 if __name__ == '__main__':
-    mid = '17845243983100e2'
-    gmail_api(hospital_data['noble'], "noble", '', mid)
+    mid = 'AAMkAGMxMzcwMjVlLThjYjYtNGJlOC1iOWQzLTUzZjg5MTEwOTJiZABGAAAAAABg8S9egpbpQom_SYSQFJTABwA80npqDluGRIdxtgeTfSBNAAAAAAEMAAA80npqDluGRIdxtgeTfSBNAALUbvEwAAA='
+    graph_api(hospital_data['ils_dumdum'], "ils_dumdum", '', mid)

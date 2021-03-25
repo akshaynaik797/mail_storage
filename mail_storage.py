@@ -104,6 +104,9 @@ def get_folders(hospital, deferred):
     return result
 
 def if_exists(**kwargs):
+    for i in kwargs:
+        if kwargs[i] is None:
+            return True
     if 'id' in kwargs:
         q = f"select * from {kwargs['hosp']}_mails where subject=%s and date=%s and id=%s limit 1"
         data = (kwargs['subject'], kwargs['date'], kwargs['id'])
@@ -503,5 +506,5 @@ def mail_storage_job(hospital, deferred):
     sched.start()
 
 if __name__ == '__main__':
-    a = get_ins_process('STAR HEALTH AND ALLIED INSUR04239 - 00040350005154', 'Enetadvicemailing@hdfcbank.net')
+    a = if_exists(a=1, b=2, c=None)
     pass
