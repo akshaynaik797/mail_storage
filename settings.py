@@ -68,6 +68,19 @@ hospital_data = {
 for i in hospital_data:
     Path(os.path.join(i, "new_attach/")).mkdir(parents=True, exist_ok=True)
 
+def html_to_pdf(src, dst):
+    with open(src, 'r') as fp:
+        data = fp.read()
+    data = remove_img_tags(data)
+    pdfkit.from_string(data, dst, configuration=pdfconfig)
+
+def get_parts(part):
+    if 'parts' in part:
+        for i in part['parts']:
+            yield from get_parts(i)
+    else:
+        yield part
+
 def gen_dict_extract(key, var):
     if isinstance(var,(list, tuple, dict)):
         for k, v in var.items():
