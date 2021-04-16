@@ -238,7 +238,6 @@ def get_utr_date_from_big(msg, **kwargs):
     except:
         log_exceptions(kwargs)
 
-
 def save_attachment(msg, download_folder, **kwargs):
     """
     Given a message, save its attachments to the specified
