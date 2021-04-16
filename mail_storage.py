@@ -27,7 +27,8 @@ from email.header import decode_header
 
 from make_log import log_exceptions, custom_log_data
 from settings import mail_time, file_no, file_blacklist, conn_data, pdfconfig, format_date, save_attachment, \
-    hospital_data, interval, clean_filename, gen_dict_extract, get_parts, html_to_pdf
+    hospital_data, interval, clean_filename, gen_dict_extract, get_parts, html_to_pdf, get_utr_date_from_big, \
+    get_ins_process
 
 
 class TimeOutException(Exception):
@@ -64,31 +65,6 @@ def create_settlement_folder(hosp, ins, date, filepath):
         copyfile(filepath, dst)
     except:
         log_exceptions(hosp=hosp, ins=ins, date=date, filepath=filepath)
-
-def get_ins_process(subject, email):
-    ins, process = "", ""
-    q1 = "select IC from email_ids where email_ids=%s"
-    q2 = "select subject, table_name from email_master where ic_id=%s"
-    q3 = "select IC_name from IC_name where IC=%s"
-    with mysql.connector.connect(**conn_data) as con:
-        cur = con.cursor()
-        cur.execute(q1, (email,))
-        result =cur.fetchone()
-        if result is not None:
-            ic_id = result[0]
-            cur.execute(q2, (ic_id,))
-            result = cur.fetchall()
-            for sub, pro in result:
-                if 'Intimation No' in subject:
-                    return ('big', 'settlement')
-                if 'STAR HEALTH AND ALLIED INSUR04239' in subject:
-                    return ('small', 'settlement')
-                if sub in subject:
-                    cur.execute(q3, (ic_id,))
-                    result1 = cur.fetchone()
-                    if result1 is not None:
-                        return (result1[0], pro)
-    return ins, process
 
 def get_folders(hospital, deferred):
     result = []
@@ -190,6 +166,9 @@ def gmail_api(data, hosp, deferred):
                                     date = date.astimezone(timezone('Asia/Kolkata')).replace(tzinfo=None)
                                     format1 = '%d/%m/%Y %H:%M:%S'
                                     date = date.strftime(format1)
+                            ins, process = get_ins_process(subject, sender)
+                            if ins == 'big' and process == "settlement":
+                                get_utr_date_from_big(i, mode='gmail_api', id=id, hosp=hosp)
                             if if_exists(id=id, subject=subject, date=date, hosp=hosp):
                                 continue
                             mail_attach_filepath = ''
@@ -299,6 +278,9 @@ def graph_api(data, hosp, deferred):
                                     tzinfo=None)
                                 b = b.strftime('%d/%m/%Y %H:%M:%S')
                                 date, subject, sender = b, i['subject'], i['sender']['emailAddress']['address']
+                                ins, process = get_ins_process(subject, sender)
+                                if ins == 'big' and process == "settlement":
+                                    get_utr_date_from_big(i, mode='graph_api', id=i['id'], hosp=hosp)
                                 if if_exists(hosp=hosp, subject=subject, date=date, id=i['id']):
                                     continue
                                 mail_attach_filepath = ''
@@ -397,6 +379,9 @@ def imap_(data, hosp, deferred):
                     for i in ['\r', '\n', '\t']:
                         subject = subject.replace(i, '').strip()
                     mid = int(message_number)
+                    ins, process = get_ins_process(subject, sender)
+                    if ins == 'big' and process == "settlement":
+                        get_utr_date_from_big(i, mode='imap_', id=mid, hosp=hosp)
                     if if_exists(date=date, subject=subject, hosp=hosp):
                         continue
                     mail_attach_filepath = ""
@@ -475,12 +460,12 @@ def mail_storage_job(hospital, deferred):
         if data['mode'] == 'gmail_api':
             sched.add_job(gmail_api, 'interval', seconds=interval, max_instances=1,
                           args=[data, hosp, deferred])
-        elif data['mode'] == 'graph_api':
-            sched.add_job(graph_api, 'interval', seconds=interval, max_instances=1,
-                          args=[data, hosp, deferred])
-        elif data['mode'] == 'imap_':
-            sched.add_job(imap_, 'interval', seconds=interval, max_instances=1,
-                          args=[data, hosp, deferred])
+        # elif data['mode'] == 'graph_api':
+        #     sched.add_job(graph_api, 'interval', seconds=interval, max_instances=1,
+        #                   args=[data, hosp, deferred])
+        # elif data['mode'] == 'imap_':
+        #     sched.add_job(imap_, 'interval', seconds=interval, max_instances=1,
+        #                   args=[data, hosp, deferred])
     sched.start()
 
 if __name__ == '__main__':

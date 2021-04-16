@@ -1,3 +1,4 @@
+import base64
 import os
 import re
 from datetime import datetime
@@ -6,7 +7,11 @@ from random import randint
 import pdfkit
 from pathlib import Path
 from dateutil.parser import parse
+from html2text import html2text
 from pytz import timezone
+import mysql.connector
+
+from make_log import log_exceptions
 
 time_out = 60
 mail_time = 10 #minutes
@@ -81,6 +86,31 @@ def get_parts(part):
     else:
         yield part
 
+def get_ins_process(subject, email):
+    ins, process = "", ""
+    q1 = "select IC from email_ids where email_ids=%s limit 1"
+    q2 = "select subject, table_name from email_master where ic_id=%s"
+    q3 = "select IC_name from IC_name where IC=%s limit 1"
+    with mysql.connector.connect(**conn_data) as con:
+        cur = con.cursor(buffered=True)
+        cur.execute(q1, (email,))
+        result = cur.fetchone()
+        if result is not None:
+            ic_id = result[0]
+            cur.execute(q2, (ic_id,))
+            result = cur.fetchall()
+            for sub, pro in result:
+                if 'Intimation No' in subject:
+                    return ('big', 'settlement')
+                if 'STAR HEALTH AND ALLIED INSUR04239' in subject:
+                    return ('small', 'settlement')
+                if sub in subject:
+                    cur.execute(q3, (ic_id,))
+                    result1 = cur.fetchone()
+                    if result1 is not None:
+                        return (result1[0], pro)
+    return ins, process
+
 def gen_dict_extract(key, var):
     if isinstance(var,(list, tuple, dict)):
         for k, v in var.items():
@@ -141,7 +171,6 @@ def remove_img_tags(data):
     p = re.compile(r'<img.*?>')
     return p.sub('', data)
 
-
 def format_date(date):
     date = date.split(',')[-1].strip()
     format = '%d %b %Y %H:%M:%S %z'
@@ -160,6 +189,54 @@ def format_date(date):
     format1 = '%d/%m/%Y %H:%M:%S'
     date = date.strftime(format1)
     return date
+
+def get_utr_date_from_big(msg, **kwargs):
+    try:
+        def get_info(data):
+            data_dict = {'utr': "", 'date': ""}
+            r_list = [r"(?<=:).*(?=Date)", r"(?<=Date:).*(?=\s+Thanking you)"]
+            for i, j in zip(r_list, data_dict):
+                tmp = re.compile(i).search(data)
+                if tmp := tmp.group().strip():
+                    data_dict[j] = tmp
+            return data_dict
+
+        data = ""
+        if kwargs['mode'] == 'graph_api':
+            if msg['body']['contentType'] == 'html':
+                data = msg['body']['content']
+                data = html2text(data)
+            elif msg['body']['contentType'] == 'text':
+                data = msg['body']['content']
+
+
+        if kwargs['mode'] == "gmail_api":
+            file_list = [i for i in get_parts(msg['payload'])]
+            for j in file_list:
+                if j['filename'] == '' and j['mimeType'] == 'text/html':
+                    data = j['body']['data']
+                    data = base64.urlsafe_b64decode(data).decode()
+                    if j['mimeType'] == 'text/html':
+                        data = html2text(data)
+
+        if kwargs['mode'] == 'imap_':
+            for part in msg.walk():
+                if part.get_content_type() == 'text/plain':
+                    data = part.get_payload(decode=True)
+                if part.get_content_type() == 'text/html':
+                    data = part.get_payload(decode=True)
+                    data = html2text(data)
+
+        data_dict = get_info(data)
+
+        q = "insert into ins_big_utr_date (`id`, `hosp`, `utr`, `date`) values (%s, %s, %s, %s);"
+        params = [kwargs['id'], kwargs['hosp'], data_dict['utr'], data_dict['date']]
+        with mysql.connector.connect(**conn_data) as con:
+            cur = con.cursor()
+            cur.execute(q, params)
+            con.commit()
+    except:
+        log_exceptions(kwargs)
 
 
 def save_attachment(msg, download_folder, **kwargs):
