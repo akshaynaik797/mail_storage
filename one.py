@@ -62,30 +62,6 @@ def create_settlement_folder(hosp, ins, date, filepath):
     except:
         log_exceptions(hosp=hosp, ins=ins, date=date, filepath=filepath)
 
-def get_ins_process(subject, email):
-    ins, process = "", ""
-    q1 = "select IC from email_ids where email_ids=%s"
-    q2 = "select subject, table_name from email_master where ic_id=%s"
-    q3 = "select IC_name from IC_name where IC=%s"
-    with mysql.connector.connect(**conn_data) as con:
-        cur = con.cursor()
-        cur.execute(q1, (email,))
-        result =cur.fetchone()
-        if result is not None:
-            ic_id = result[0]
-            cur.execute(q2, (ic_id,))
-            result = cur.fetchall()
-            for sub, pro in result:
-                if 'Intimation No' in subject:
-                    return ('big', 'settlement')
-                if 'STAR HEALTH AND ALLIED INSUR04239' in subject:
-                    return ('small', 'settlement')
-                if sub in subject:
-                    cur.execute(q3, (ic_id,))
-                    result1 = cur.fetchone()
-                    if result1 is not None:
-                        return (result1[0], pro)
-    return ins, process
 
 def get_folders(hospital, deferred):
     result = []

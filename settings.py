@@ -100,9 +100,9 @@ def get_ins_process(subject, email):
             cur.execute(q2, (ic_id,))
             result = cur.fetchall()
             for sub, pro in result:
-                if 'Intimation No' in subject:
+                if 'Intimation No' in subject and email == 'claims.payment@starhealth.biz':
                     return ('big', 'settlement')
-                if 'STAR HEALTH AND ALLIED INSUR04239' in subject:
+                if 'STAR HEALTH AND ALLIED INSUR04239' in subject and email == 'claims.payment@starhealth.biz':
                     return ('small', 'settlement')
                 if sub in subject:
                     cur.execute(q3, (ic_id,))
@@ -236,7 +236,7 @@ def get_utr_date_from_big(msg, **kwargs):
             cur.execute(q, params)
             con.commit()
     except:
-        log_exceptions(kwargs)
+        log_exceptions(kwargs=kwargs)
 
 def save_attachment(msg, download_folder, **kwargs):
     """
