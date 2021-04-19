@@ -14,7 +14,7 @@ import mysql.connector
 from make_log import log_exceptions
 
 time_out = 60
-mail_time = 10 #minutes
+mail_time = 1700 #minutes
 interval = 60 #seconds
 conn_data = {'host': "iclaimdev.caq5osti8c47.ap-south-1.rds.amazonaws.com",
              'user': "admin",
@@ -77,7 +77,9 @@ def html_to_pdf(src, dst):
     with open(src, 'r') as fp:
         data = fp.read()
     data = remove_img_tags(data)
-    pdfkit.from_string(data, dst, configuration=pdfconfig)
+    with open(src, 'w') as fp:
+        fp.write(data)
+    pdfkit.from_file(src, dst, configuration=pdfconfig)
 
 def get_parts(part):
     if 'parts' in part:
