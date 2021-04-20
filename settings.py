@@ -14,7 +14,7 @@ import mysql.connector
 from make_log import log_exceptions
 
 time_out = 60
-mail_time = 1700 #minutes
+mail_time = 5 #minutes
 interval = 60 #seconds
 conn_data = {'host': "iclaimdev.caq5osti8c47.ap-south-1.rds.amazonaws.com",
              'user': "admin",
@@ -70,6 +70,7 @@ hospital_data = {
     },
 }
 
+time_gap_list = [i for i in hospital_data]
 for i in hospital_data:
     Path(os.path.join(i, "new_attach/")).mkdir(parents=True, exist_ok=True)
 
@@ -289,3 +290,21 @@ def save_attachment(msg, download_folder, **kwargs):
                 att_path = os.path.join(download_folder, filename)
                 pass
     return att_path
+
+def time_gap(hospital, mail_time):
+    global time_gap_list
+    try:
+        if hospital in time_gap_list:
+            q = f"SELECT date from {hospital}_mails order by STR_TO_DATE(date, '%d/%m/%Y %H:%i:%s') desc limit 1"
+            with mysql.connector.connect(**conn_data) as con:
+                cur = con.cursor()
+                cur.execute(q)
+                r = cur.fetchone()
+                db_time = datetime.strptime(r[0], '%d/%m/%Y %H:%M:%S')
+                mail_time = datetime.now() - db_time
+                mail_time = round(mail_time.total_seconds()/60)+1
+                time_gap_list.remove(hospital)
+    except:
+        log_exceptions(hospital, msg="time_gap")
+    finally:
+        return mail_time

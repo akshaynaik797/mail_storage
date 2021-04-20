@@ -27,8 +27,8 @@ from email.header import decode_header
 
 from make_log import log_exceptions, custom_log_data
 from settings import mail_time, file_no, file_blacklist, conn_data, pdfconfig, format_date, save_attachment, \
-    hospital_data, interval, clean_filename, gen_dict_extract, get_parts, html_to_pdf, get_utr_date_from_big, \
-    get_ins_process
+    hospital_data, interval, clean_filename, get_parts, html_to_pdf, get_utr_date_from_big, \
+    get_ins_process, time_gap
 
 
 class TimeOutException(Exception):
@@ -100,7 +100,8 @@ def if_exists(**kwargs):
 def gmail_api(data, hosp, deferred):
     try:
         print(hosp)
-        after = datetime.now() - timedelta(minutes=mail_time)
+        l_mail_time = time_gap(hosp, mail_time)
+        after = datetime.now() - timedelta(minutes=l_mail_time)
         after = int(after.timestamp())
         attach_path = os.path.join(hosp, 'new_attach/')
         token_file = data['data']['token_file']
@@ -240,7 +241,8 @@ def gmail_api(data, hosp, deferred):
 def graph_api(data, hosp, deferred):
     try:
         print(hosp)
-        after = datetime.now() - timedelta(minutes=mail_time)
+        l_mail_time = time_gap(hosp, mail_time)
+        after = datetime.now() - timedelta(minutes=l_mail_time)
         after = after.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         attachfile_path = os.path.join(hosp, 'new_attach/')
         email = data['data']['email']
@@ -254,8 +256,6 @@ def graph_api(data, hosp, deferred):
         if not result:
             logging.info("No suitable token exists in cache. Let's get a new one from AAD.")
             result = app.acquire_token_for_client(scopes=config["scope"])
-        after = datetime.now() - timedelta(minutes=mail_time)
-        after = after.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         if "access_token" in result:
             for folder in get_folders(hosp, deferred):
                 with open('logs/folders.log', 'a') as tfp:
@@ -347,7 +347,8 @@ def graph_api(data, hosp, deferred):
 def imap_(data, hosp, deferred):
     try:
         print(hosp)
-        after = datetime.now() - timedelta(minutes=mail_time)
+        l_mail_time = time_gap(hosp, mail_time)
+        after = datetime.now() - timedelta(minutes=l_mail_time)
         after = after.strftime('%d-%b-%Y')
         attachfile_path = os.path.join(hosp, 'new_attach/')
         server, email_id, password = data['data']['host'], data['data']['email'], data['data']['password']
