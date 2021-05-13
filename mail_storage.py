@@ -461,12 +461,12 @@ def mail_storage_job(hospital, deferred):
         if data['mode'] == 'gmail_api':
             sched.add_job(gmail_api, 'interval', seconds=interval, max_instances=1,
                           args=[data, hosp, deferred])
-        elif data['mode'] == 'graph_api':
-            sched.add_job(graph_api, 'interval', seconds=interval, max_instances=1,
-                          args=[data, hosp, deferred])
-        elif data['mode'] == 'imap_':
-            sched.add_job(imap_, 'interval', seconds=interval, max_instances=1,
-                          args=[data, hosp, deferred])
+        # elif data['mode'] == 'graph_api':
+        #     sched.add_job(graph_api, 'interval', seconds=interval, max_instances=1,
+        #                   args=[data, hosp, deferred])
+        # elif data['mode'] == 'imap_':
+        #     sched.add_job(imap_, 'interval', seconds=interval, max_instances=1,
+        #                   args=[data, hosp, deferred])
     sched.start()
 
 if __name__ == '__main__':

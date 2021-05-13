@@ -1,6 +1,4 @@
-from settings import time_gap, mail_time
+from settings import get_ins_process
 
-a = time_gap('ils', mail_time)
-b = time_gap('ils', mail_time)
-c = time_gap('ils_dumdum', mail_time)
+a = get_ins_process("Settlement of your Claim Reference :CCN# 24388073 under policy# OG-22-1919-8403-00000014", "claims@mediassistindia.com")
 pass
