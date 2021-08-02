@@ -4,7 +4,7 @@ import logging
 
 import requests
 import msal
-
+#link     https://docs.microsoft.com/en-us/azure/active-directory/develop/quickstart-v2-python-daemon
 def main(data):
     cred_file = data['data']['json_file']
     config = json.load(open(cred_file))
